@@ -1,13 +1,14 @@
 // AForge Image Processing Library
 // AForge.NET framework
 //
-// Copyright © Andrew Kirillov, 2005-2007
-// andrew.kirillov@gmail.com
+// Copyright © Andrew Kirillov, 2005-2009
+// andrew.kirillov@aforgenet.com
 //
 
 namespace AForge.Imaging.Filters
 {
     using System;
+    using System.Collections.Generic;
     using System.Drawing;
     using System.Drawing.Imaging;
 
@@ -17,6 +18,10 @@ namespace AForge.Imaging.Filters
     /// 
     /// <remarks><para>The filter performs labeling of objects in binary image. It colors
     /// each separate object using different color.</para>
+    /// 
+    /// <para>The filter accepts 8 bpp grayscale images and produces
+    /// 24 bpp RGB image.</para>
+    ///
     /// <para>Sample usage:</para>
     /// <code>
     /// // create filter
@@ -26,13 +31,14 @@ namespace AForge.Imaging.Filters
     /// // check objects count
     /// int objectCount = filter.ObjectCount;
     /// </code>
+    /// 
     /// <para><b>Initial image:</b></para>
-    /// <img src="sample2.jpg" width="320" height="240" />
+    /// <img src="img/imaging/sample2.jpg" width="320" height="240" />
     /// <para><b>Result image:</b></para>
-    /// <img src="labeling.jpg" width="320" height="240" />
+    /// <img src="img/imaging/labeling.jpg" width="320" height="240" />
     /// </remarks>
     /// 
-    public class ConnectedComponentsLabeling : FilterGrayToColor
+    public class ConnectedComponentsLabeling : BaseFilter
     {
         // Color table for coloring objects
         private static Color[] colorTable = new Color[]
@@ -50,8 +56,34 @@ namespace AForge.Imaging.Filters
             Color.PowderBlue, Color.Plum,	Color.PapayaWhip,	Color.Orange
 		};
 
+        // private format translation dictionary
+        private Dictionary<PixelFormat, PixelFormat> formatTransalations = new Dictionary<PixelFormat, PixelFormat>( );
+
+        /// <summary>
+        /// Format translations dictionary.
+        /// </summary>
+        public override Dictionary<PixelFormat, PixelFormat> FormatTransalations
+        {
+            get { return formatTransalations; }
+        }
+
         // blob counter
-        private BlobCounter blobCounter = new BlobCounter( );
+        private BlobCounterBase blobCounter = new BlobCounter( );
+
+        /// <summary>
+        /// Blob counter used to locate separate blobs.
+        /// </summary>
+        /// 
+        /// <remarks><para>The property allows to set blob counter to use for blobs' localization.</para>
+        /// 
+        /// <para>Default value is set to <see cref="BlobCounter"/>.</para>
+        /// </remarks>
+        /// 
+        public BlobCounterBase BlobCounter
+        {
+            get { return blobCounter; }
+            set { blobCounter = value; }
+        }
 
         /// <summary>
         /// Colors used to color the binary image.
@@ -140,13 +172,23 @@ namespace AForge.Imaging.Filters
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="ConnectedComponentsLabeling"/> class.
+        /// </summary>
+        /// 
+        public ConnectedComponentsLabeling( )
+        {
+            // initialize format translation dictionary
+            formatTransalations[PixelFormat.Format8bppIndexed] = PixelFormat.Format24bppRgb;
+        }
+
+        /// <summary>
         /// Process the filter on the specified image.
         /// </summary>
         /// 
         /// <param name="sourceData">Source image data.</param>
         /// <param name="destinationData">Destination image data.</param>
         /// 
-        protected override unsafe void ProcessFilter( BitmapData sourceData, BitmapData destinationData )
+        protected override unsafe void ProcessFilter( UnmanagedImage sourceData, UnmanagedImage destinationData )
         {
             // process the image
             blobCounter.ProcessImage( sourceData );
@@ -161,7 +203,7 @@ namespace AForge.Imaging.Filters
             int dstOffset = destinationData.Stride - width * 3;
 
             // do the job
-            byte* dst = (byte*) destinationData.Scan0.ToPointer( );
+            byte* dst = (byte*) destinationData.ImageData.ToPointer( );
             int p = 0;
 
             // for each row

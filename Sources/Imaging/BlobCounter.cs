@@ -1,8 +1,8 @@
 // AForge Image Processing Library
 // AForge.NET framework
 //
-// Copyright © Andrew Kirillov, 2005-2007
-// andrew.kirillov@gmail.com
+// Copyright © Andrew Kirillov, 2005-2009
+// andrew.kirillov@aforgenet.com
 //
 
 namespace AForge.Imaging
@@ -17,13 +17,22 @@ namespace AForge.Imaging
     /// 
     /// <remarks><para>The class counts and extracts stand alone objects in
     /// binary images using connected components labeling algorithm.</para>
+    /// 
+    /// <para><note>The algorithm treats all black pixels as background, but not an object.
+    /// This means that all objects, which could be located be the algorithm, should have other
+    /// than black color.</note></para>
+    /// 
+    /// <para>For blobs' searching the class supports only 8 bpp indexed grayscale images. 
+    /// See documentation about <see cref="BlobCounterBase"/> for information about which
+    /// pixel formats are supported for extraction of blobs.</para>
+    /// 
     /// <para>Sample usage:</para>
     /// <code>
     /// // create an instance of blob counter algorithm
     /// BlobCounter bc = new BlobCounter( );
     /// // process binary image
     /// bc.ProcessImage( image );
-    /// Rectangle[] rects = bc.GetObjectRectangles( );
+    /// Rectangle[] rects = bc.GetObjectsRectangles( );
     /// // process blobs
     /// foreach ( Rectangle rect in rects )
     /// {
@@ -39,9 +48,9 @@ namespace AForge.Imaging
         /// </summary>
         /// 
         /// <remarks>Creates new instance of the <see cref="BlobCounter"/> class with
-        /// an empty objects map. Before using <see cref="BlobCounterBase.GetObjects(Bitmap)"/> or 
-        /// <see cref="BlobCounterBase.GetObjectRectangles"/> methods, the
-        /// <see cref="BlobCounterBase.ProcessImage(Bitmap)"/>
+        /// an empty objects map. Before using methods, which provide information about blobs
+        /// or extract them, the <see cref="BlobCounterBase.ProcessImage(Bitmap)"/>,
+        /// <see cref="BlobCounterBase.ProcessImage(BitmapData)"/> or <see cref="BlobCounterBase.ProcessImage(UnmanagedImage)"/>
         /// method should be called to collect objects map.</remarks>
         /// 
         public BlobCounter( ) { }
@@ -62,21 +71,38 @@ namespace AForge.Imaging
         /// 
         public BlobCounter( BitmapData imageData ) : base( imageData ) { }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BlobCounter"/> class.
+        /// </summary>
+        /// 
+        /// <param name="image">Binary unmanaged image to look for objects in.</param>
+        /// 
+        public BlobCounter( UnmanagedImage image ) : base( image ) { }
 
         /// <summary>
         /// Actual objects map building.
         /// </summary>
         /// 
-        /// <param name="rawImageData">Raw image data.</param>
-        /// <param name="stride">Length of one image line in bytes.</param>
+        /// <param name="image">Unmanaged image to process.</param>
         /// 
-        protected override void BuildObjectsMap( IntPtr rawImageData, int stride )
+        /// <remarks>The method supports only 8 bpp indexed grayscale image.</remarks>
+        /// 
+        /// <exception cref="UnsupportedImageFormat">Unsupported pixel format of the source image.</exception>
+        /// 
+        protected override void BuildObjectsMap( UnmanagedImage image )
         {
+            int stride = image.Stride;
             int offset = stride - imageWidth;
+
+            // check pixel format
+            if ( image.PixelFormat != PixelFormat.Format8bppIndexed )
+            {
+                throw new UnsupportedImageFormat( "Unsupported pixel format of the source image." );
+            }
 
             // we don't want one pixel width images
             if ( imageWidth == 1 )
-                throw new ArgumentException( "Too small image" );
+                throw new InvalidImageProperties( "Too small image." );
 
             // allocate labels array
             objectLabels = new int[imageWidth * imageHeight];
@@ -96,7 +122,7 @@ namespace AForge.Imaging
             // do the job
             unsafe
             {
-                byte* src = (byte*) rawImageData.ToPointer( );
+                byte* src = (byte*) image.ImageData.ToPointer( );
                 int p = 0;
 
                 // 1 - for pixels of the first row
@@ -283,7 +309,7 @@ namespace AForge.Imaging
                     reMap[i] = ++objectsCount;
                 }
             }
-            // second pass to compete remapping
+            // second pass to complete remapping
             for ( int i = 1; i <= labelsCount; i++ )
             {
                 if ( map[i] != i )
